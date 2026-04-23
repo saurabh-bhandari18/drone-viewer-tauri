@@ -1,1 +1,28 @@
 @import "tailwindcss";
+
+/* Force html/body to fill the window exactly */
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Make iframes fill their container and never scroll */
+iframe {
+  width: 100% !important;
+  height: 100% !important;
+  border: none !important;
+  display: block;
+  overflow: hidden;
+}
+
+/* MJPEG stream image — fit inside container, no scroll */
+.stream-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  background: #000;
+}
