@@ -34,33 +34,48 @@ function StreamPanel({ streamUrl }: { streamUrl: string }) {
 }
 
 function FoxglovePanel({ foxgloveSpace }: { foxgloveSpace: number }) {
-  const [loaded, setLoaded] = useState(false);
+  const [loaded, setLoaded] = useState(true);
+  const [rosConnected, setRosConnected] = useState(false);
   const isNarrow = foxgloveSpace < NARROW_THRESHOLD;
+
+  useEffect(() => {
+    const checkRos = () => {
+      const ws = new WebSocket(`ws://${FOXGLOVE_HOST}:9090`);
+      ws.onopen = () => { setRosConnected(true); ws.close(); };
+      ws.onerror = () => { setRosConnected(false); };
+    };
+    checkRos();
+    const interval = setInterval(checkRos, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="flex items-center gap-2 px-3 py-2 bg-[#1a1a2e] border-b border-[#2a2a3e] shrink-0">
-        <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+        <span className={`w-2 h-2 rounded-full shrink-0 ${rosConnected ? "bg-green-500" : "bg-red-500"}`} />
         <span className="text-sm font-bold text-[#64c8ff] shrink-0">Point Cloud</span>
-        <span className={`text-[10px] px-1.5 rounded shrink-0 ${
-          isNarrow ? "bg-yellow-500/20 text-yellow-400" : "bg-blue-500/20 text-blue-400"
-        }`}>
+        <span className={`text-[10px] px-1.5 rounded shrink-0 ${isNarrow ? "bg-yellow-500/20 text-yellow-400" : "bg-blue-500/20 text-blue-400"
+          }`}>
           {isNarrow ? "Compact" : "Full"}
         </span>
-        {!loaded && (
-          <button
-            onClick={() => setLoaded(true)}
-            className="ml-auto px-3 py-1 bg-[#2e2e45] border border-[#2a2a3e] rounded text-xs text-[#64c8ff] hover:bg-[#2a2a3e] transition shrink-0"
-          >
-            Load
-          </button>
-        )}
-        {loaded && (
+        <span className={`text-[10px] px-1.5 rounded shrink-0 ${
+          rosConnected ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
+        }`}>
+          {rosConnected ? "ROS Connected" : "ROS Disconnected"}
+        </span>
+        {loaded ? (
           <button
             onClick={() => setLoaded(false)}
             className="ml-auto px-3 py-1 bg-[#2e2e45] border border-[#2a2a3e] rounded text-xs text-gray-400 hover:bg-[#2a2a3e] transition shrink-0"
           >
             Clear
+          </button>
+        ) : (
+          <button
+            onClick={() => setLoaded(true)}
+            className="ml-auto px-3 py-1 bg-[#2e2e45] border border-[#2a2a3e] rounded text-xs text-[#64c8ff] hover:bg-[#2a2a3e] transition shrink-0"
+          >
+            Load
           </button>
         )}
       </div>
@@ -120,9 +135,8 @@ function SettingsBar({
           <button
             key={key}
             onClick={() => onLayoutChange(key)}
-            className={`px-1.5 py-0.5 rounded text-[10px] ${
-              layout === key ? "bg-[#64c8ff] text-black" : "bg-[#2e2e45] text-gray-300"
-            }`}
+            className={`px-1.5 py-0.5 rounded text-[10px] ${layout === key ? "bg-[#64c8ff] text-black" : "bg-[#2e2e45] text-gray-300"
+              }`}
           >
             {label}
           </button>
