@@ -2,18 +2,12 @@ import { useState, useEffect, useRef } from "react";
 import "./App.css";
 
 // ===== CONFIGURATION =====
-const DEFAULT_STREAM_URL = "http://192.168.42.129:8081/";
-const STREAM_POLL_INTERVAL = 3000; // check every 3 seconds
+const DEFAULT_STREAM_URL = "http://192.168.42.129:8081/stream";
+const STREAM_POLL_INTERVAL = 3000;
 
-const LOCAL_MODE = true;
-
-const FOXGLOVE_HOST = LOCAL_MODE ? "localhost" : "192.168.144.50";
-
-const FOXGLOVE_WIDE_PORT = LOCAL_MODE ? "8080" : "8080";
-const FOXGLOVE_NARROW_PORT = LOCAL_MODE ? "8082" : "8082";
-
-const FOXGLOVE_WIDE = `http://${FOXGLOVE_HOST}:${FOXGLOVE_WIDE_PORT}/?ds=rosbridge-websocket&ds.url=ws%3A%2F%2F${FOXGLOVE_HOST}%3A9090`;
-const FOXGLOVE_NARROW = `http://${FOXGLOVE_HOST}:${FOXGLOVE_NARROW_PORT}/?ds=rosbridge-websocket&ds.url=ws%3A%2F%2F${FOXGLOVE_HOST}%3A9090`;
+const FOXGLOVE_HOST = "192.168.144.50";
+const FOXGLOVE_WIDE = `http://${FOXGLOVE_HOST}:8080/?ds=rosbridge-websocket&ds.url=ws%3A%2F%2F${FOXGLOVE_HOST}%3A9090`;
+const FOXGLOVE_NARROW = `http://${FOXGLOVE_HOST}:8082/?ds=rosbridge-websocket&ds.url=ws%3A%2F%2F${FOXGLOVE_HOST}%3A9090`;
 
 const NARROW_THRESHOLD = 46;
 // ==========================
@@ -127,23 +121,34 @@ function SettingsBar({
     { key: "cloud", label: "Cloud Only" },
   ];
 
+  // When no stream, only "Cloud Only" is available
+  const needsStream = (key: Layout) => key === "side" || key === "stack" || key === "video";
+
   return (
     <div className="flex items-center gap-4 px-4 py-1.5 bg-[#1a1a2e] border-b border-[#2a2a3e] shrink-0">
       <div className="flex items-center gap-1.5">
         <span className="text-[10px] text-gray-400">Layout:</span>
-        {layouts.map(({ key, label }) => (
-          <button
-            key={key}
-            onClick={() => onLayoutChange(key)}
-            className={`px-1.5 py-0.5 rounded text-[10px] ${layout === key ? "bg-[#64c8ff] text-black" : "bg-[#2e2e45] text-gray-300"
+        {layouts.map(({ key, label }) => {
+          const disabled = !streaming && needsStream(key);
+          return (
+            <button
+              key={key}
+              onClick={() => !disabled && onLayoutChange(key)}
+              className={`px-1.5 py-0.5 rounded text-[10px] transition ${
+                disabled
+                  ? "bg-[#1a1a2e] text-[#444] cursor-not-allowed"
+                  : layout === key
+                    ? "bg-[#64c8ff] text-black"
+                    : "bg-[#2e2e45] text-gray-300"
               }`}
-          >
-            {label}
-          </button>
-        ))}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
 
-      {(layout === "side" || layout === "stack") && (
+      {streaming && (layout === "side" || layout === "stack") && (
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-gray-400">Split:</span>
           <input
@@ -172,7 +177,37 @@ function App() {
   const [split, setSplit] = useState(50);
   const [layout, setLayout] = useState<Layout>("cloud"); // start with cloud only
   const [streaming, setStreaming] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const prevStreaming = useRef(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Drag-to-resize between panels
+  useEffect(() => {
+    if (!dragging) return;
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const isVertical = layout === "stack";
+      const percent = isVertical
+        ? ((e.clientY - rect.top) / rect.height) * 100
+        : ((e.clientX - rect.left) / rect.width) * 100;
+      setSplit(Math.min(Math.max(Math.round(percent), 5), 95));
+    };
+
+    const onMouseUp = () => setDragging(false);
+
+    document.body.style.cursor = layout === "stack" ? "row-resize" : "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [dragging, layout]);
 
   // Poll the MJPEG stream — auto-detect when Android starts/stops streaming
   useEffect(() => {
@@ -229,24 +264,29 @@ function App() {
         streaming={streaming}
       />
 
-      <div className={`flex-1 flex ${isStacked ? "flex-col" : "flex-row"} overflow-hidden min-h-0`}>
-        {showVideo && (
-          <div
-            style={{ [isStacked ? "height" : "width"]: !showCloud ? "100%" : `${split}%` }}
-            className="flex flex-col border-r border-[#2a2a3e] overflow-hidden min-h-0 min-w-0"
-          >
-            <StreamPanel streamUrl={DEFAULT_STREAM_URL} />
-          </div>
-        )}
+      <div
+        ref={containerRef}
+        className={`flex-1 flex ${isStacked ? "flex-col" : "flex-row"} overflow-hidden min-h-0`}
+      >
+        <div
+          style={{
+            [isStacked ? "height" : "width"]: !showCloud ? "100%" : `${split}%`,
+            display: showVideo ? "flex" : "none",
+          }}
+          className="flex flex-col overflow-hidden min-h-0 min-w-0"
+        >
+          <StreamPanel streamUrl={DEFAULT_STREAM_URL} />
+        </div>
 
-        {showCloud && (
-          <div
-            style={{ [isStacked ? "height" : "width"]: !showVideo ? "100%" : `${100 - split}%` }}
-            className="flex flex-col overflow-hidden min-h-0 min-w-0"
-          >
-            <FoxglovePanel foxgloveSpace={foxgloveSpace} />
-          </div>
-        )}
+        <div
+          style={{
+            [isStacked ? "height" : "width"]: !showVideo ? "100%" : `${100 - split}%`,
+            display: showCloud ? "flex" : "none",
+          }}
+          className="flex flex-col overflow-hidden min-h-0 min-w-0"
+        >
+          <FoxglovePanel foxgloveSpace={foxgloveSpace} />
+        </div>
       </div>
     </div>
   );
