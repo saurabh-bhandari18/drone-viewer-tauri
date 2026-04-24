@@ -215,7 +215,7 @@ function App() {
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 2000);
-        const res = await fetch(DEFAULT_STREAM_URL, {
+        await fetch(DEFAULT_STREAM_URL, {
           signal: controller.signal,
           mode: "no-cors",
         });
