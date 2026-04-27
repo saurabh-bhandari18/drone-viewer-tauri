@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import "./App.css";
 
 // ===== CONFIGURATION =====
@@ -63,7 +63,15 @@ function StreamPanel({
         )}
       </div>
       <div className="flex-1 bg-black overflow-hidden flex items-center justify-center min-h-0">
-        <img src={streamUrl} alt="Stream" className="stream-img" />
+        {activeUrl ? (
+          <img src={activeUrl} alt="Stream" className="stream-img" />
+        ) : (
+          <div className="text-center text-gray-600">
+            <p className="text-lg mb-2">No Stream</p>
+            <p className="text-xs">Press "Start Mirror" on the controller</p>
+            <p className="text-xs mt-1">Then click "Connect" above</p>
+          </div>
+        )}
       </div>
     </div>
   );
