@@ -1,75 +1,41 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
 // ===== CONFIGURATION =====
-const DEFAULT_STREAM_URL = "http://192.168.42.129:8081/stream";
+const LOCAL_MODE = false;
+const STREAM_HOST = LOCAL_MODE ? "localhost" : "192.168.42.129";
+const STREAM_URL = `http://${STREAM_HOST}:8081/stream`;
+const PING_URL = `http://${STREAM_HOST}:8081/ping`;
 
-const FOXGLOVE_HOST = "192.168.144.50";
+const FOXGLOVE_HOST = LOCAL_MODE ? "localhost" : "192.168.144.50";
 const FOXGLOVE_WIDE = `http://${FOXGLOVE_HOST}:8080/?ds=rosbridge-websocket&ds.url=ws%3A%2F%2F${FOXGLOVE_HOST}%3A9090`;
 const FOXGLOVE_NARROW = `http://${FOXGLOVE_HOST}:8082/?ds=rosbridge-websocket&ds.url=ws%3A%2F%2F${FOXGLOVE_HOST}%3A9090`;
 
 const NARROW_THRESHOLD = 46;
+const POLL_INTERVAL_MS = 2000;
 // ==========================
 
-function StreamPanel({
-  onConnect,
-  onDisconnect,
-}: {
-  onConnect: () => void;
-  onDisconnect: () => void;
-}) {
-  const [url, setUrl] = useState(DEFAULT_STREAM_URL);
-  const [activeUrl, setActiveUrl] = useState("");
-  const [connected, setConnected] = useState(false);
-
-  const handleConnect = () => {
-    setActiveUrl(url);
-    setConnected(true);
-    onConnect();
-  };
-
-  const handleDisconnect = () => {
-    setActiveUrl("");
-    setConnected(false);
-    onDisconnect();
-  };
-
+function StreamPanel({ streaming }: { streaming: boolean }) {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="flex items-center gap-2 px-3 py-2 bg-[#1a1a2e] border-b border-[#2a2a3e] shrink-0">
-        <span className="w-2 h-2 rounded-full shrink-0 bg-green-500" />
+        <span className={`w-2 h-2 rounded-full shrink-0 ${streaming ? "bg-green-500 animate-pulse" : "bg-gray-500"}`} />
         <span className="text-sm font-bold text-[#64c8ff] shrink-0">Video Mirror</span>
-        <input
-          type="text"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          className="flex-1 min-w-0 bg-[#0f0f1a] border border-[#2a2a3e] rounded px-2 py-1 text-xs text-gray-300 focus:border-[#64c8ff] outline-none"
-          placeholder="http://<controller-ip>:8081/stream"
-        />
-        {!connected ? (
-          <button
-            onClick={handleConnect}
-            className="px-3 py-1 bg-green-700 border border-green-600 rounded text-xs text-white hover:bg-green-600 transition shrink-0"
-          >
-            Connect
-          </button>
-        ) : (
-          <button
-            onClick={handleDisconnect}
-            className="px-3 py-1 bg-red-700 border border-red-600 rounded text-xs text-white hover:bg-red-600 transition shrink-0"
-          >
-            Disconnect
-          </button>
-        )}
+        <span className={`text-[10px] px-1.5 rounded shrink-0 ${
+          streaming ? "bg-green-500/20 text-green-400" : "bg-gray-500/20 text-gray-400"
+        }`}>
+          {streaming ? "Live" : "Waiting..."}
+        </span>
       </div>
       <div className="flex-1 bg-black overflow-hidden flex items-center justify-center min-h-0">
-        {activeUrl ? (
-          <img src={activeUrl} alt="Stream" className="stream-img" />
+        {streaming ? (
+          <img src={STREAM_URL} alt="Stream" className="stream-img" />
         ) : (
           <div className="text-center text-gray-600">
             <p className="text-lg mb-2">No Stream</p>
-            <p className="text-xs">Press "Start Mirror" on the controller</p>
-            <p className="text-xs mt-1">Then click "Connect" above</p>
+            <p className="text-xs">Press the mirror icon on the controller</p>
+            <p className="text-xs mt-1">Stream will appear automatically</p>
           </div>
         )}
       </div>
@@ -141,14 +107,12 @@ function SettingsBar({
   layout,
   onLayoutChange,
   streaming,
-  onConnect,
 }: {
   split: number;
   onSplitChange: (v: number) => void;
   layout: Layout;
   onLayoutChange: (l: Layout) => void;
   streaming: boolean;
-  onConnect: () => void;
 }) {
   const layouts: { key: Layout; label: string }[] = [
     { key: "side", label: "Side by Side" },
@@ -204,12 +168,10 @@ function SettingsBar({
           Stream Active
         </span>
       ) : (
-        <button
-          onClick={onConnect}
-          className="ml-auto px-2 py-0.5 bg-green-700 border border-green-600 rounded text-[10px] text-white hover:bg-green-600 transition"
-        >
-          Connect Stream
-        </button>
+        <span className="ml-auto text-[10px] text-gray-500 flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-gray-500" />
+          Waiting for stream...
+        </span>
       )}
     </div>
   );
@@ -219,17 +181,34 @@ function App() {
   const [split, setSplit] = useState(50);
   const [layout, setLayout] = useState<Layout>("cloud");
   const [streaming, setStreaming] = useState(false);
+  const wasStreaming = useRef(false);
 
-  const handleStreamConnect = () => {
-    setStreaming(true);
-    setLayout("side");
-    setSplit(50);
-  };
+  // Auto-detect stream via Rust ping
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const alive = await invoke<boolean>("ping_stream", { url: PING_URL });
+        setStreaming(alive);
+      } catch {
+        setStreaming(false);
+      }
+    };
 
-  const handleStreamDisconnect = () => {
-    setStreaming(false);
-    setLayout("cloud");
-  };
+    poll(); // check immediately on mount
+    const id = setInterval(poll, POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, []);
+
+  // Auto-switch layout when stream appears/disappears
+  useEffect(() => {
+    if (streaming && !wasStreaming.current) {
+      setLayout("side");
+      setSplit(50);
+    } else if (!streaming && wasStreaming.current) {
+      setLayout("cloud");
+    }
+    wasStreaming.current = streaming;
+  }, [streaming]);
 
   const showVideo = streaming && layout !== "cloud";
   const showCloud = layout !== "video";
@@ -249,7 +228,6 @@ function App() {
         layout={layout}
         onLayoutChange={setLayout}
         streaming={streaming}
-        onConnect={handleStreamConnect}
       />
 
       <div className={`flex-1 flex ${isStacked ? "flex-col" : "flex-row"} overflow-hidden min-h-0`}>
@@ -261,7 +239,7 @@ function App() {
           }}
           className="flex flex-col border-r border-[#2a2a3e] overflow-hidden min-h-0 min-w-0"
         >
-          <StreamPanel onConnect={handleStreamConnect} onDisconnect={handleStreamDisconnect} />
+          <StreamPanel streaming={streaming} />
         </div>
 
         {/* Foxglove panel — always mounted, hidden with display:none */}
