@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import "./App.css";
 
 // ===== CONFIGURATION =====
@@ -37,7 +37,7 @@ function StreamPanel({
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="flex items-center gap-2 px-3 py-2 bg-[#1a1a2e] border-b border-[#2a2a3e] shrink-0">
-        <span className={`w-2 h-2 rounded-full shrink-0 ${connected ? "bg-green-500" : "bg-gray-500"}`} />
+        <span className="w-2 h-2 rounded-full shrink-0 bg-green-500" />
         <span className="text-sm font-bold text-[#64c8ff] shrink-0">Video Mirror</span>
         <input
           type="text"
@@ -63,15 +63,7 @@ function StreamPanel({
         )}
       </div>
       <div className="flex-1 bg-black overflow-hidden flex items-center justify-center min-h-0">
-        {activeUrl ? (
-          <img src={activeUrl} alt="Stream" className="stream-img" />
-        ) : (
-          <div className="text-center text-gray-600">
-            <p className="text-lg mb-2">No Stream</p>
-            <p className="text-xs">Press "Start Mirror" on the controller</p>
-            <p className="text-xs mt-1">Then click "Connect" above</p>
-          </div>
-        )}
+        <img src={streamUrl} alt="Stream" className="stream-img" />
       </div>
     </div>
   );
