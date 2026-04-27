@@ -12,7 +12,7 @@ const FOXGLOVE_HOST = LOCAL_MODE ? "localhost" : "192.168.144.50";
 const FOXGLOVE_WIDE = `http://${FOXGLOVE_HOST}:8080/?ds=rosbridge-websocket&ds.url=ws%3A%2F%2F${FOXGLOVE_HOST}%3A9090`;
 const FOXGLOVE_NARROW = `http://${FOXGLOVE_HOST}:8082/?ds=rosbridge-websocket&ds.url=ws%3A%2F%2F${FOXGLOVE_HOST}%3A9090`;
 
-const NARROW_THRESHOLD = 46;
+const NARROW_THRESHOLD = 56;
 const POLL_INTERVAL_MS = 2000;
 // ==========================
 
